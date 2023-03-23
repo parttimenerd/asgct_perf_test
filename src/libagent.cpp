@@ -618,8 +618,8 @@ bool checkJThread(jthread javaThread) {
  * reached, returns the value of the atomic variable */
 bool waitOnAtomicTillUnequal(std::atomic<long> &atomic, long expected = -1,
                              int timeout = 1) {
-  auto start = std::chrono::system_clock::now();
-  while (atomic.load() == expected && std::chrono::system_clock::now() - start <
+  auto start = std::chrono::steady_clock::now();
+  while (atomic.load() == expected && std::chrono::steady_clock::now() - start <
                                           std::chrono::milliseconds(timeout)) {
   }
   return atomic != expected;
@@ -628,7 +628,7 @@ bool waitOnAtomicTillUnequal(std::atomic<long> &atomic, long expected = -1,
 /** returns true if the obtaining of stack traces was successful */
 bool sample(pthread_t thread) {
   // send the signal
-  auto start = std::chrono::system_clock::now();
+  auto start = std::chrono::steady_clock::now();
   traceLength = -100;
   if (!sendSignal(thread)) {
     fprintf(stderr, "could not send signal to thread %ld\n", thread);
@@ -641,7 +641,7 @@ bool sample(pthread_t thread) {
     asgctBrokenTimings.push_back(timing.load());
     return false;
   }
-  auto end = std::chrono::system_clock::now();
+  auto end = std::chrono::steady_clock::now();
   auto duration =
       std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
           .count() / 1000.f;
@@ -658,7 +658,7 @@ bool sample(pthread_t thread) {
 }
 
 void asgctGSTHandler(ucontext_t *ucontext) {
-  auto start = std::chrono::system_clock::now();
+  auto start = std::chrono::steady_clock::now();
   JNIEnv *jni;
   jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
   if (jni == nullptr) {
@@ -666,15 +666,15 @@ void asgctGSTHandler(ucontext_t *ucontext) {
     return;
   }
   jniEnvTiming = std::chrono::duration_cast<std::chrono::microseconds>(
-                     std::chrono::system_clock::now() - start)
+                     std::chrono::steady_clock::now() - start)
                      .count();
-  start = std::chrono::system_clock::now();
+  start = std::chrono::steady_clock::now();
   trace.env_id = jni;
   trace.frames = frames;
   asgct(&trace, maxDepth, ucontext);
   traceLength = trace.num_frames;
   timing = std::chrono::duration_cast<std::chrono::nanoseconds>(
-               std::chrono::system_clock::now() - start)
+               std::chrono::steady_clock::now() - start)
                .count() / 1000.0f;
 }
 
@@ -734,9 +734,9 @@ void sampleLoop() {
     if (env == nullptr) {
       env = newEnv;
     }
-    auto start = std::chrono::system_clock::now();
+    auto start = std::chrono::steady_clock::now();
     sample(g);
-    auto duration = std::chrono::system_clock::now() - start;
+    auto duration = std::chrono::steady_clock::now() - start;
     auto sleep = interval - duration;
     if (std::chrono::seconds::zero() < sleep) {
       std::this_thread::sleep_for(sleep);
