@@ -240,7 +240,7 @@ static void startSamplerThread() {
 }
 
 static int maxDepth = MAX_DEPTH;
-static int printStatsEveryNthTrace = 30000;
+static int printStatsEveryNthTrace = 100000;
 static int sampleIntervalInUs = 1;
 static int threadsPerInterval = 10;
 static bool checkThreadRunning = false;
@@ -257,7 +257,7 @@ Options:
     maximum depth of the stack traces to be collected
     has to be smaller than 1024
 
-  printStatsEveryNthTrace=<int> (default: 10000)
+  printStatsEveryNthTrace=<int> (default: 100000)
     print statistics every n-th stack trace
 
   sampleIntervalInUs=<int> (default: 100)
@@ -407,7 +407,7 @@ template <typename _T> struct _PrintColumn {
   size_t _width;
 };
 
-const size_t COLUMN_WIDTH = 8;
+const size_t COLUMN_WIDTH = 9;
 
 template <typename _T>
 inline _PrintColumn<_T> printColumn(_T content, size_t width = COLUMN_WIDTH) {
@@ -423,20 +423,20 @@ operator<<(std::basic_ostream<_CharT, _Traits> &__os, _PrintColumn<long> __f) {
 template <typename _T, typename _CharT, typename _Traits>
 inline std::basic_ostream<_CharT, _Traits> &
 operator<<(std::basic_ostream<_CharT, _Traits> &__os, _PrintColumn<_T> __f) {
-  return __os << std::setw(__f._width) << std::right << std::setprecision(1)
+  return __os << std::setw(__f._width) << std::right << std::setprecision(2)
               << std::fixed << __f._content;
 }
 
 /** collects values and has stats */
 class Statistic {
-  std::vector<long> values;
-  long _min = -1;
-  long _max = -1;
-  long _sum = -1;
+  std::vector<float> values;
+  float _min = -1;
+  float _max = -1;
+  double _sum = -1;
 
 public:
   Statistic() {}
-  void push_back(long value) {
+  void push_back(float value) {
     values.push_back(value);
     if (_min == -1 || value < _min) {
       _min = value;
@@ -447,29 +447,47 @@ public:
     _sum += value;
   }
 
-  double mean() const { return _sum * 1.0 / values.size(); }
+  float mean() const { return _sum / values.size(); }
 
-  long median() const {
-    std::vector<long> valuesCopy = values;
-    std::sort(valuesCopy.begin(), valuesCopy.end());
-    if (valuesCopy.size() % 2 == 0) {
-      return (valuesCopy[valuesCopy.size() / 2 - 1] +
-              valuesCopy[valuesCopy.size() / 2]) /
-             2;
-    } else {
-      return valuesCopy[valuesCopy.size() / 2];
+  float tenthQuantile() {
+    if (values.size() == 0) {
+      return 0;
     }
+    // compute without array copy
+    auto it = values.begin() + values.size() * 9 / 10;
+    std::nth_element(values.begin(), it, values.end());
+    return *it;
   }
 
-  long min() const { return _min; }
+  float median() {
+    if (values.size() == 0) {
+      return 0;
+    }
+    // compute without array copy
+    auto it = values.begin() + values.size() / 2;
+    std::nth_element(values.begin(), it, values.end());
+    return *it;
+  }
 
-  long max() const { return _max; }
+  float the99th() {
+    if (values.size() == 0) {
+      return 0;
+    }
+    // compute without array copy
+    auto it = values.begin() + values.size() * 99 / 100;
+    std::nth_element(values.begin(), it, values.end());
+    return *it;
+  }
+
+  float min() const { return _min; }
+
+  float max() const { return _max; }
 
   long count() const { return values.size(); }
 
-  double stddev() const {
-    return std::sqrt(std::accumulate(values.begin(), values.end(), 0.0,
-                                     [this](double a, double b) {
+  float stddev() const {
+    return std::sqrt(std::accumulate(values.begin(), values.end(), 0.0f,
+                                     [this](float a, float b) {
                                        return a + (b - mean()) * (b - mean());
                                      }) /
                      values.size());
@@ -478,12 +496,13 @@ public:
   std::string header() const {
     std::stringstream ss;
     ss << printColumn("count", 12) << printColumn("min")
-       << printColumn("median") << printColumn("mean") << printColumn("max")
-       << printColumn("std") << printColumn("std/mean");
+       << printColumn("mean") << printColumn("max")
+       << printColumn("std") << printColumn("std/mean")
+       << printColumn("median") << printColumn("90th") << printColumn("99th");
     return ss.str();
   }
 
-  std::string str(bool with_header = true) const {
+  std::string str(bool with_header = true) {
     if (count() == 0) {
       return "";
     }
@@ -492,8 +511,9 @@ public:
       ss << header() << std::endl;
     }
     ss << printColumn(count(), 12) << printColumn(min())
-       << printColumn(median()) << printColumn(mean()) << printColumn(max())
-       << printColumn(stddev()) << printColumn(stddev() / mean());
+       << printColumn(mean()) << printColumn(max())
+       << printColumn(stddev()) << printColumn(stddev() / mean())
+       << printColumn(median()) << printColumn(tenthQuantile()) << printColumn(the99th());
     return ss.str();
   }
 };
@@ -508,8 +528,11 @@ template <size_t max_buckets = MAX_DEPTH> class LengthBucketStatistic {
 public:
   LengthBucketStatistic(long bucketSize) : bucketSize(bucketSize) {}
 
-  void push_back(long length, long value) {
+  void push_back(long length, float value) {
     size_t bucket = length / bucketSize;
+    if (bucket >= max_buckets) {
+      return;
+    }
     buckets.at(bucket).push_back(value);
     if (bucket > maxBucket) {
       maxBucket = bucket;
@@ -524,7 +547,7 @@ public:
     return ss.str();
   }
 
-  std::string str(bool with_header = true) const {
+  std::string str(bool with_header = true) {
     std::stringstream ss;
     if (with_header) {
       ss << header() << std::endl;
@@ -550,8 +573,8 @@ Statistic asgctBrokenTimings;
 
 ASGCT_CallTrace trace;
 ASGCT_CallFrame frames[MAX_DEPTH];
-std::atomic<long> timing;
-std::atomic<long> jniEnvTiming;
+std::atomic<float> timing;
+std::atomic<float> jniEnvTiming;
 std::atomic<long> traceLength;
 
 std::mutex printInfoMutex;
@@ -563,9 +586,9 @@ void printInfo() {
             << "signal handler till end" << std::endl
             << asgctTimingsWithSignalHandling.str() << std::endl
             << "env" << std::endl
-            << std::setw(15) << " " << jniEnvTimings.str(false) << std::endl
+            << std::setw(16) << " " << jniEnvTimings.str(false) << std::endl
             << "asgct broken" << std::endl
-            << std::setw(15) << " " << asgctBrokenTimings.str(false)
+            << std::setw(16) << " " << asgctBrokenTimings.str(false)
             << std::endl;
 }
 
@@ -606,12 +629,12 @@ bool waitOnAtomicTillUnequal(std::atomic<long> &atomic, long expected = -1,
 bool sample(pthread_t thread) {
   // send the signal
   auto start = std::chrono::system_clock::now();
-  timing = -1;
+  traceLength = -100;
   if (!sendSignal(thread)) {
     fprintf(stderr, "could not send signal to thread %ld\n", thread);
     return false;
   }
-  if (!waitOnAtomicTillUnequal(timing, -1)) {
+  if (!waitOnAtomicTillUnequal(traceLength, -100)) {
     return false;
   }
   if (traceLength <= 0) {
@@ -620,8 +643,8 @@ bool sample(pthread_t thread) {
   }
   auto end = std::chrono::system_clock::now();
   auto duration =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-          .count();
+      std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+          .count() / 1000.f;
   asgctTimingsWithSignalHandling.push_back(traceLength.load(), duration);
   asgctTimings.push_back(traceLength.load(), timing.load());
   jniEnvTimings.push_back(jniEnvTiming.load());
@@ -650,9 +673,9 @@ void asgctGSTHandler(ucontext_t *ucontext) {
   trace.frames = frames;
   asgct(&trace, maxDepth, ucontext);
   traceLength = trace.num_frames;
-  timing = std::chrono::duration_cast<std::chrono::microseconds>(
+  timing = std::chrono::duration_cast<std::chrono::nanoseconds>(
                std::chrono::system_clock::now() - start)
-               .count();
+               .count() / 1000.0f;
 }
 
 void sample(std::mt19937 &g) {
