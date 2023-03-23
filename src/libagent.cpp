@@ -409,7 +409,8 @@ template <typename _T> struct _PrintColumn {
 
 const size_t COLUMN_WIDTH = 8;
 
-template <typename _T> inline _PrintColumn<_T> printColumn(_T content, size_t width = COLUMN_WIDTH) {
+template <typename _T>
+inline _PrintColumn<_T> printColumn(_T content, size_t width = COLUMN_WIDTH) {
   return {content, width};
 }
 
@@ -446,9 +447,9 @@ public:
     _sum += value;
   }
 
-  double mean() const { return _sum / values.size(); }
+  double mean() const { return _sum * 1.0 / values.size(); }
 
-  double median() const {
+  long median() const {
     std::vector<long> valuesCopy = values;
     std::sort(valuesCopy.begin(), valuesCopy.end());
     if (valuesCopy.size() % 2 == 0) {
@@ -476,9 +477,9 @@ public:
 
   std::string header() const {
     std::stringstream ss;
-    ss << printColumn("count", 12) << printColumn("min") << printColumn("median")
-       << printColumn("mean") << printColumn("max") << printColumn("std")
-       << printColumn("std/mean");
+    ss << printColumn("count", 12) << printColumn("min")
+       << printColumn("median") << printColumn("mean") << printColumn("max")
+       << printColumn("std") << printColumn("std/mean");
     return ss.str();
   }
 
@@ -490,9 +491,9 @@ public:
     if (with_header) {
       ss << header() << std::endl;
     }
-    ss << printColumn(count(), 12) << printColumn(min()) << printColumn(median())
-       << printColumn(mean()) << printColumn(max()) << printColumn(stddev())
-       << printColumn(stddev() / mean());
+    ss << printColumn(count(), 12) << printColumn(min())
+       << printColumn(median()) << printColumn(mean()) << printColumn(max())
+       << printColumn(stddev()) << printColumn(stddev() / mean());
     return ss.str();
   }
 };
@@ -533,8 +534,9 @@ public:
          << printColumn(buckets.at(i).count() * 100.0 / overall.count())
          << buckets.at(i).str(false) << std::endl;
     }
-    ss << std::left << std::setw(7) << "overall" << std::setw(COLUMN_WIDTH) << std::right
-       << std::setprecision(3) << 100 << overall.str(false) << std::endl;
+    ss << std::left << std::setw(7) << "overall" << std::setw(COLUMN_WIDTH)
+       << std::right << std::setprecision(3) << 100 << overall.str(false)
+       << std::endl;
     return ss.str();
   }
 
@@ -552,15 +554,18 @@ std::atomic<long> timing;
 std::atomic<long> jniEnvTiming;
 std::atomic<long> traceLength;
 
+std::mutex printInfoMutex;
+
 void printInfo() {
+  std::lock_guard<std::mutex> lock(printInfoMutex);
   std::cerr << "asgct alone" << std::endl
             << asgctTimings.str() << std::endl
             << "signal handler till end" << std::endl
             << asgctTimingsWithSignalHandling.str() << std::endl
             << "env" << std::endl
-            << std::setw(12 + 7) << " " << jniEnvTimings.str(false) << std::endl
+            << std::setw(15) << " " << jniEnvTimings.str(false) << std::endl
             << "asgct broken" << std::endl
-            << std::setw(12 + 7) << " " << asgctBrokenTimings.str(false)
+            << std::setw(15) << " " << asgctBrokenTimings.str(false)
             << std::endl;
 }
 
@@ -586,8 +591,8 @@ bool checkJThread(jthread javaThread) {
   return true;
 }
 
-/** busy wait till the atomic variable is as expected or the timeout (ms) is reached,
- * returns the value of the atomic variable */
+/** busy wait till the atomic variable is as expected or the timeout (ms) is
+ * reached, returns the value of the atomic variable */
 bool waitOnAtomicTillUnequal(std::atomic<long> &atomic, long expected = -1,
                              int timeout = 1) {
   auto start = std::chrono::system_clock::now();
@@ -666,14 +671,13 @@ void sample(std::mt19937 &g) {
     int count = 0;
     for (auto thread : avThreads) {
       auto javaThread = getJThreadForPThread(env, thread);
-      if (!javaThread || !checkJThread(javaThread) ||
-          !sample(thread)) {
+      if (!javaThread || !checkJThread(javaThread) || !sample(thread)) {
         continue;
       }
       if (++count >= threadsPerInterval) {
         break;
       }
-    } 
+    }
   } else {
     int count = 0;
     for (auto thread : avThreads) {

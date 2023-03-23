@@ -33,31 +33,33 @@ The last two commands should both result in something like the following:
 
 ```
 asgct alone // just calling AsyncGetCallTrace successfully (all timings in µs, with µs granularity) 
- bucket         %     count       min    median      mean       max       std  std/mean
-      0      69.8     99401         0       1.0       1.0       100       1.9       1.9
-     10      20.1     28558         1       1.0       1.0       527       3.5       3.5
-     20       6.8      9714         1       3.0       4.0       104       3.6       0.9
-     30       2.1      3051         2       4.0       7.0       656      13.3       1.9
-     40       1.0      1481         3       6.0       8.0        77       6.2       0.8
-     50       0.1        97         4       5.0       5.0         9       0.9       0.2
-     60       0.0        48         5       6.0       6.0         7       0.6       0.1
-overall       100    142350         0       1.0       2.0       656       3.3       1.7
+ bucket       %       count     min  median    mean     max     stdstd/mean
+      0    74.4      133865       0       1     1.3      42     0.8     0.6
+     10    16.4       29480       1       2     2.1      48     1.5     0.7
+     20     6.1       10913       2       4     4.5      65     2.0     0.4
+     30     2.0        3649       2       6     6.7      45     3.8     0.6
+     40     1.1        1956       3       8     8.1      98     4.5     0.6
+     50     0.1          90       4       5     5.6       8     0.7     0.1
+     60     0.0          46       5       6     6.5       8     0.6     0.1
+     70     0.0           1       8       8     7.0       8     1.0     0.1
+overall     100      180000       0       1     1.8      98     1.8     1.0
 
 signal handler till end // sending a signal and waiting till after AsyncGetCallTrace
- bucket         %     count       min    median      mean       max       std  std/mean
-      0      69.8     99401         3      10.0      18.0     32651     256.7      14.3
-     10      20.1     28558         4       6.0       7.0      4409      30.1       4.3
-     20       6.8      9714         5       7.0      11.0       813      25.6       2.3
-     30       2.1      3051         5       8.0      12.0       750      21.2       1.8
-     40       1.0      1481         4      10.0      13.0       216      10.8       0.8
-     50       0.1        97         7       9.0       9.0        14       1.2       0.1
-     60       0.0        48         8      10.0       9.0        12       1.2       0.1
-overall       100    142350         3      10.0      15.0     32651     215.1      14.3
+ bucket       %       count     min  median    mean     max     stdstd/mean
+      0    74.4      133865       3      10    10.6     538     3.7     0.4
+     10    16.4       29480       4       9     8.6     166     3.8     0.4
+     20     6.1       10913       4      12    10.9     133     4.8     0.4
+     30     2.0        3649       5      11    11.7     404    10.1     0.9
+     40     1.1        1956       6      13    13.5     222     9.2     0.7
+     50     0.1          90       7       9     9.4      14     1.4     0.1
+     60     0.0          46       8      10     9.9      14     1.0     0.1
+     70     0.0           1      12      12    11.0      12     1.0     0.1
+overall     100      180000       3      10    10.3     538     4.2     0.4
 
 env  // obtaining the JNIEnv* for the thread
-                     142350         0       0.0       0.0        15       0.2       inf
+                     180000       0       0     0.0      12     0.1    27.0
 asgct broken  // calling AsyncGetCallTrace and receiving a broken result
-                      43867         0       0.0       0.0        15       0.1       inf
+                      43416       0       0     0.0       3     0.1    15.3
 ```
 
 
